@@ -51,8 +51,8 @@ pub fn CBC(comptime BlockCipher: anytype) type {
             // Last block
             {
                 var in = [_]u8{0} ** block_length;
-                var padding_length = @intCast(u8, padded_length - dst.len);
-                mem.set(u8, in[0..padding_length], padding_length);
+                var padding_length = @intCast(u8, padded_length - src.len);
+                mem.set(u8, in[padding_length..], padding_length);
                 mem.copy(u8, in[0..], src[i..]);
                 var j: usize = 0;
                 while (j < block_length) : (j += 1) cv[j] ^= in[j];
