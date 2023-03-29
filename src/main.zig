@@ -103,15 +103,21 @@ test "CBC mode" {
 
     const z = M.init(key);
 
+    var h = std.crypto.hash.sha2.Sha256.init(.{});
     comptime var len = 0;
     inline while (len <= src_.len) : (len += 1) {
         const src = src_[0..len];
         var dst = [_]u8{0} ** M.paddedLength(src.len);
         z.encrypt(&dst, src, iv);
+        h.update(&dst);
 
         var decrypted = [_]u8{0} ** src.len;
         try z.decrypt(&decrypted, &dst, iv);
 
         try std.testing.expectEqualSlices(u8, src, &decrypted);
     }
+    var res: [32]u8 = undefined;
+    h.final(&res);
+    const expected = [_]u8{ 94, 191, 122, 226, 45, 255, 237, 166, 158, 166, 49, 9, 236, 29, 2, 213, 88, 54, 90, 217, 117, 201, 62, 44, 8, 162, 243, 157, 91, 70, 246, 35 };
+    try std.testing.expectEqualSlices(u8, &expected, &res);
 }
