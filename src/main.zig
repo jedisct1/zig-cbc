@@ -46,18 +46,18 @@ pub fn CBC(comptime BlockCipher: anytype) type {
                 var j: usize = 0;
                 while (j < block_length) : (j += 1) cv[j] ^= in[j];
                 self.enc_ctx.encrypt(&cv, &cv);
-                mem.copy(u8, dst[i..], &cv);
+                @memcpy(dst[i .. i + block_length], &cv);
             }
             // Last block
             {
                 var in = [_]u8{0} ** block_length;
                 var padding_length = @intCast(u8, padded_length - src.len);
-                mem.set(u8, in[padding_length..], padding_length);
-                mem.copy(u8, in[0..], src[i..]);
+                @memset(in[padding_length..], padding_length);
+                @memcpy(in[0 .. src.len - i], src[i..]);
                 var j: usize = 0;
                 while (j < block_length) : (j += 1) cv[j] ^= in[j];
                 self.enc_ctx.encrypt(&cv, &cv);
-                mem.copy(u8, dst[i..], cv[0 .. dst.len - i]);
+                @memcpy(dst[i..], cv[0 .. dst.len - i]);
             }
         }
 
@@ -89,7 +89,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
                 self.dec_ctx.decrypt(&out, in);
                 var j: usize = 0;
                 while (j < block_length) : (j += 1) out[j] ^= cv[j];
-                mem.copy(u8, dst[i..], out[0 .. dst.len - i]);
+                @memcpy(dst[i..], out[0 .. dst.len - i]);
             }
         }
     };
@@ -99,7 +99,8 @@ test "CBC mode" {
     const M = CBC(aes.Aes128);
     const key = [_]u8{ 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c };
     const iv = [_]u8{ 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
-    const src_ = "This is a test of AES-CBC";
+    const src_ = "This is a test of AES-CBC that goes on longer than a couple blocks. It is a somewhat long test case to type out!";
+    try std.testing.expect(src_.len % 16 == 0); // sanity check that the input aligns to block bouGdary
 
     const z = M.init(key);
 
@@ -118,6 +119,6 @@ test "CBC mode" {
     }
     var res: [32]u8 = undefined;
     h.final(&res);
-    const expected = [_]u8{ 94, 191, 122, 226, 45, 255, 237, 166, 158, 166, 49, 9, 236, 29, 2, 213, 88, 54, 90, 217, 117, 201, 62, 44, 8, 162, 243, 157, 91, 70, 246, 35 };
+    const expected = [_]u8{ 248, 255, 192, 47, 153, 60, 72, 191, 249, 197, 53, 138, 208, 248, 190, 55, 116, 244, 107, 108, 178, 67, 173, 70, 151, 236, 47, 166, 233, 125, 20, 121 };
     try std.testing.expectEqualSlices(u8, &expected, &res);
 }
