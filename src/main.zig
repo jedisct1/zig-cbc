@@ -46,18 +46,18 @@ pub fn CBC(comptime BlockCipher: anytype) type {
                 var j: usize = 0;
                 while (j < block_length) : (j += 1) cv[j] ^= in[j];
                 self.enc_ctx.encrypt(&cv, &cv);
-                mem.copyForwards(u8, dst[i..], &cv);
+                @memcpy(dst[i..cv.len], &cv);
             }
             // Last block
             {
                 var in = [_]u8{0} ** block_length;
                 var padding_length = @intCast(u8, padded_length - src.len);
                 @memset(in[padding_length..], padding_length);
-                mem.copyForwards(u8, in[0..], src[i..]);
+                @memcpy(in[0 .. src.len - i], src[i..]);
                 var j: usize = 0;
                 while (j < block_length) : (j += 1) cv[j] ^= in[j];
                 self.enc_ctx.encrypt(&cv, &cv);
-                mem.copyForwards(u8, dst[i..], cv[0 .. dst.len - i]);
+                @memcpy(dst[i..], cv[0 .. dst.len - i]);
             }
         }
 
@@ -89,7 +89,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
                 self.dec_ctx.decrypt(&out, in);
                 var j: usize = 0;
                 while (j < block_length) : (j += 1) out[j] ^= cv[j];
-                mem.copyForwards(u8, dst[i..], out[0 .. dst.len - i]);
+                @memcpy(dst[i..], out[0 .. dst.len - i]);
             }
         }
     };
