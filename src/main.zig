@@ -131,28 +131,28 @@ test "encrypt and decrypt on block boundary" {
     //
 
     {
-        comptime var val = M.paddedLength(0);
-        try std.testing.expectEqual(0, val);
+        const val = M.paddedLength(0);
+        try std.testing.expectEqual(@as(usize, 0), val);
     }
     {
-        comptime var val = M.paddedLength(1);
-        try std.testing.expectEqual(16, val);
+        const val = M.paddedLength(1);
+        try std.testing.expectEqual(@as(usize, 16), val);
     }
 
     {
-        comptime var val = M.paddedLength(15);
-        try std.testing.expectEqual(16, val);
+        const val = M.paddedLength(15);
+        try std.testing.expectEqual(@as(usize, 16), val);
     }
 
     {
         // don't round up
-        comptime var val = M.paddedLength(16);
-        try std.testing.expectEqual(16, val);
+        const val = M.paddedLength(16);
+        try std.testing.expectEqual(@as(usize, 16), val);
     }
 
     {
-        comptime var val = M.paddedLength(17);
-        try std.testing.expectEqual(32, val);
+        const val = M.paddedLength(17);
+        try std.testing.expectEqual(@as(usize, 32), val);
     }
 
     //
