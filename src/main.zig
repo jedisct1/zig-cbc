@@ -96,6 +96,7 @@ test "CBC mode" {
     const iv = [_]u8{ 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
     const src_ = "This is a test of AES-CBC that goes on longer than a couple blocks. It is a somewhat long test case to type out!";
     const expected = [_]u8{ 32, 252, 200, 238, 32, 28, 17, 125, 123, 151, 155, 190, 31, 191, 253, 139, 24, 221, 222, 242, 8, 19, 219, 65, 255, 8, 14, 245, 190, 73, 192, 187 };
+    var res: [32]u8 = undefined;
 
     try comptime std.testing.expect(src_.len / M.paddedLength(1) >= 3); // Ensure that we have at least 3 blocks
 
@@ -114,7 +115,6 @@ test "CBC mode" {
 
         try std.testing.expectEqualSlices(u8, src, &decrypted);
     }
-    var res: [32]u8 = undefined;
     h.final(&res);
     try std.testing.expectEqualSlices(u8, &expected, &res);
 
