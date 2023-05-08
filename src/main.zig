@@ -28,7 +28,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
 
         /// Return the length of the ciphertext given the length of the plaintext.
         pub fn paddedLength(length: usize) usize {
-            return (std.math.divCeil(usize, length + 1, EncryptCtx.block_length) catch unreachable) * EncryptCtx.block_length;
+            return (std.math.divCeil(usize, length, EncryptCtx.block_length) catch unreachable) * EncryptCtx.block_length;
         }
 
         /// Encrypt the given plaintext for the given IV.
@@ -43,19 +43,17 @@ pub fn CBC(comptime BlockCipher: anytype) type {
             var i: usize = 0;
             while (i + block_length <= src.len) : (i += block_length) {
                 const in = src[i..][0..block_length];
-                var j: usize = 0;
-                while (j < block_length) : (j += 1) cv[j] ^= in[j];
+                for (cv[0..], in) |*x, y| x.* ^= y;
                 self.enc_ctx.encrypt(&cv, &cv);
                 @memcpy(dst[i .. i + block_length], &cv);
             }
             // Last block
-            {
+            if (i < src.len) {
                 var in = [_]u8{0} ** block_length;
                 var padding_length = @intCast(u8, padded_length - src.len);
                 @memset(in[padding_length..], padding_length);
                 @memcpy(in[0 .. src.len - i], src[i..]);
-                var j: usize = 0;
-                while (j < block_length) : (j += 1) cv[j] ^= in[j];
+                for (cv[0..], in) |*x, y| x.* ^= y;
                 self.enc_ctx.encrypt(&cv, &cv);
                 @memcpy(dst[i..], cv[0 .. dst.len - i]);
             }
@@ -78,8 +76,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
                 const in = src[i..][0..block_length];
                 const out = dst[i..][0..block_length];
                 self.dec_ctx.decrypt(out, in);
-                var j: usize = 0;
-                while (j < block_length) : (j += 1) out[j] ^= cv[j];
+                for (out[0..], cv) |*x, y| x.* ^= y;
                 cv = in;
             }
             // Last block - We intentionally don't check the padding to mitigate timing attacks
@@ -87,8 +84,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
                 const in = src[i..][0..block_length];
                 var out = [_]u8{0} ** block_length;
                 self.dec_ctx.decrypt(&out, in);
-                var j: usize = 0;
-                while (j < block_length) : (j += 1) out[j] ^= cv[j];
+                for (out[0..], cv) |*x, y| x.* ^= y;
                 @memcpy(dst[i..], out[0 .. dst.len - i]);
             }
         }
@@ -105,8 +101,7 @@ test "CBC mode" {
     const z = M.init(key);
 
     var h = std.crypto.hash.sha2.Sha256.init(.{});
-    comptime var len = 0;
-    inline while (len <= src_.len) : (len += 1) {
+    inline for (0..src_.len) |len| {
         const src = src_[0..len];
         var dst = [_]u8{0} ** M.paddedLength(src.len);
         z.encrypt(&dst, src, iv);
@@ -119,6 +114,6 @@ test "CBC mode" {
     }
     var res: [32]u8 = undefined;
     h.final(&res);
-    const expected = [_]u8{ 248, 255, 192, 47, 153, 60, 72, 191, 249, 197, 53, 138, 208, 248, 190, 55, 116, 244, 107, 108, 178, 67, 173, 70, 151, 236, 47, 166, 233, 125, 20, 121 };
+    const expected = [_]u8{ 232, 208, 30, 75, 213, 218, 29, 122, 173, 231, 214, 236, 102, 221, 80, 142, 186, 36, 76, 222, 65, 239, 134, 19, 224, 174, 219, 250, 65, 254, 229, 176 };
     try std.testing.expectEqualSlices(u8, &expected, &res);
 }
