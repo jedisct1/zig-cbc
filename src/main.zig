@@ -1,6 +1,5 @@
 const std = @import("std");
 const aes = std.crypto.core.aes;
-const assert = std.debug.assert;
 const mem = std.mem;
 const debug = std.debug;
 
@@ -29,7 +28,6 @@ pub fn CBC(comptime BlockCipher: anytype) type {
 
         /// Return the length of the ciphertext given the length of the plaintext.
         pub fn paddedLength(length: usize) usize {
-            assert(length > 0);
             return (std.math.divCeil(usize, length, EncryptCtx.block_length) catch unreachable) * EncryptCtx.block_length;
         }
 
@@ -106,7 +104,7 @@ test "CBC mode" {
 
     const z = M.init(key);
 
-    comptime var len = 1;
+    comptime var len = 0;
     inline while (len < src_.len) : (len += 1) {
         const src = src_[0..len];
         var dst = [_]u8{0} ** M.paddedLength(src.len);
@@ -125,7 +123,14 @@ test "encrypt and decrypt on block boundary" {
     const z = M.init(key);
     const iv = [_]u8{ 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00 };
 
-    // test various regions around the boundaries of a block
+    //
+    // Test various regions around the boundaries of a block
+    //
+
+    {
+        comptime var val = M.paddedLength(0);
+        try std.testing.expectEqual(0, val);
+    }
     {
         comptime var val = M.paddedLength(1);
         try std.testing.expectEqual(16, val);
@@ -147,8 +152,11 @@ test "encrypt and decrypt on block boundary" {
         try std.testing.expectEqual(32, val);
     }
 
+    //
+    // Encrypt and decrypt a message that aligns on the block boundary
+    //
+
     {
-        // encrypt and decrypt a message that aligns on the block boundary
         const src = "0123456789abcdef";
         try std.testing.expectEqual(16, src.len);
 
