@@ -45,9 +45,8 @@ iv = bytearray(
     ]
 )
 
-src_ = bytearray(
-    b"This is a test of AES-CBC that goes on longer than a couple blocks. It is a somewhat long test case to type out!"
-)
+src_ = b"This is a test of AES-CBC that goes on longer than a couple blocks. It is a somewhat long test case to type out!"
+
 
 cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
 
