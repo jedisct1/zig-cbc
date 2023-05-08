@@ -1,5 +1,6 @@
 const std = @import("std");
 const aes = std.crypto.core.aes;
+const assert = std.debug.assert;
 const mem = std.mem;
 const debug = std.debug;
 
@@ -28,7 +29,8 @@ pub fn CBC(comptime BlockCipher: anytype) type {
 
         /// Return the length of the ciphertext given the length of the plaintext.
         pub fn paddedLength(length: usize) usize {
-            return (std.math.divCeil(usize, length + 1, EncryptCtx.block_length) catch unreachable) * EncryptCtx.block_length;
+            assert(length > 0);
+            return (std.math.divCeil(usize, length, EncryptCtx.block_length) catch unreachable) * EncryptCtx.block_length;
         }
 
         /// Encrypt the given plaintext for the given IV.
@@ -104,21 +106,60 @@ test "CBC mode" {
 
     const z = M.init(key);
 
-    var h = std.crypto.hash.sha2.Sha256.init(.{});
-    comptime var len = 0;
-    inline while (len <= src_.len) : (len += 1) {
+    comptime var len = 1;
+    inline while (len < src_.len) : (len += 1) {
         const src = src_[0..len];
         var dst = [_]u8{0} ** M.paddedLength(src.len);
         z.encrypt(&dst, src, iv);
-        h.update(&dst);
 
         var decrypted = [_]u8{0} ** src.len;
         try z.decrypt(&decrypted, &dst, iv);
 
         try std.testing.expectEqualSlices(u8, src, &decrypted);
     }
-    var res: [32]u8 = undefined;
-    h.final(&res);
-    const expected = [_]u8{ 248, 255, 192, 47, 153, 60, 72, 191, 249, 197, 53, 138, 208, 248, 190, 55, 116, 244, 107, 108, 178, 67, 173, 70, 151, 236, 47, 166, 233, 125, 20, 121 };
-    try std.testing.expectEqualSlices(u8, &expected, &res);
+}
+
+test "encrypt and decrypt on block boundary" {
+    const M = CBC(aes.Aes256);
+    const key = [_]u8{ 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c } ** 2;
+    const z = M.init(key);
+    const iv = [_]u8{ 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00 };
+
+    // test various regions around the boundaries of a block
+    {
+        comptime var val = M.paddedLength(1);
+        try std.testing.expectEqual(16, val);
+    }
+
+    {
+        comptime var val = M.paddedLength(15);
+        try std.testing.expectEqual(16, val);
+    }
+
+    {
+        // don't round up
+        comptime var val = M.paddedLength(16);
+        try std.testing.expectEqual(16, val);
+    }
+
+    {
+        comptime var val = M.paddedLength(17);
+        try std.testing.expectEqual(32, val);
+    }
+
+    {
+        // encrypt and decrypt a message that aligns on the block boundary
+        const src = "0123456789abcdef";
+        try std.testing.expectEqual(16, src.len);
+
+        var dst = [_]u8{0} ** M.paddedLength(16);
+        z.encrypt(&dst, src, iv);
+
+        const expected = &[_]u8{ 174, 250, 164, 11, 93, 18, 137, 95, 193, 237, 234, 162, 174, 174, 40, 189 };
+        try std.testing.expectEqualSlices(u8, expected, &dst);
+
+        var final = [_]u8{0} ** M.paddedLength(16);
+        try z.decrypt(&final, &dst, iv);
+        try std.testing.expectEqualSlices(u8, src, &final);
+    }
 }
