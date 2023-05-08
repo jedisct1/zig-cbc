@@ -107,17 +107,22 @@ test "CBC mode" {
 
     const z = M.init(key);
 
-    comptime var len = 0;
-    inline while (len < src_.len) : (len += 1) {
+    var h = std.crypto.hash.sha2.Sha256.init(.{});
+    inline for (0..src_.len) |len| {
         const src = src_[0..len];
         var dst = [_]u8{0} ** M.paddedLength(src.len);
         z.encrypt(&dst, src, iv);
+        h.update(&dst);
 
         var decrypted = [_]u8{0} ** src.len;
         try z.decrypt(&decrypted, &dst, iv);
 
         try std.testing.expectEqualSlices(u8, src, &decrypted);
     }
+    var res: [32]u8 = undefined;
+    h.final(&res);
+    const expected = [_]u8{ 232, 208, 30, 75, 213, 218, 29, 122, 173, 231, 214, 236, 102, 221, 80, 142, 186, 36, 76, 222, 65, 239, 134, 19, 224, 174, 219, 250, 65, 254, 229, 176 };
+    try std.testing.expectEqualSlices(u8, &expected, &res);
 }
 
 test "encrypt and decrypt on block boundary" {
