@@ -1,8 +1,7 @@
 #! /usr/bin/env python3
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import padding, hashes
 
 key = bytearray(
     [
