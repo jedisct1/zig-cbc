@@ -97,10 +97,11 @@ test "CBC mode" {
     const key = [_]u8{ 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c };
     const iv = [_]u8{ 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
     const src_ = "This is a test of AES-CBC that goes on longer than a couple blocks. It is a somewhat long test case to type out!";
-    try std.testing.expect(src_.len % 16 == 0); // sanity check that the input aligns to block bouGdary
+    try comptime std.testing.expect(src_.len / M.paddedLength(1) >= 3); // Ensure that we have at least 3 blocks
 
     const z = M.init(key);
 
+    // Test encryption and decryption with distinct buffers
     var h = std.crypto.hash.sha2.Sha256.init(.{});
     inline for (0..src_.len) |len| {
         const src = src_[0..len];
@@ -116,5 +117,20 @@ test "CBC mode" {
     var res: [32]u8 = undefined;
     h.final(&res);
     const expected = [_]u8{ 232, 208, 30, 75, 213, 218, 29, 122, 173, 231, 214, 236, 102, 221, 80, 142, 186, 36, 76, 222, 65, 239, 134, 19, 224, 174, 219, 250, 65, 254, 229, 176 };
+    try std.testing.expectEqualSlices(u8, &expected, &res);
+
+    // Test encryption and decryption with the same buffer
+    h = std.crypto.hash.sha2.Sha256.init(.{});
+    inline for (0..src_.len) |len| {
+        var buf = [_]u8{0} ** M.paddedLength(len);
+        @memcpy(buf[0..len], src_[0..len]);
+        z.encrypt(&buf, buf[0..len], iv);
+        h.update(&buf);
+
+        try z.decrypt(buf[0..len], &buf, iv);
+
+        try std.testing.expectEqualSlices(u8, src_[0..len], buf[0..len]);
+    }
+    h.final(&res);
     try std.testing.expectEqualSlices(u8, &expected, &res);
 }
