@@ -76,6 +76,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
             // Decryption could be parallelized
             while (i + block_length <= dst.len) : (i += block_length) {
                 const in = src[i..][0..block_length];
+                cv = in.*;
                 const out = dst[i..][0..block_length];
                 @memcpy(nextCV, in);
                 self.dec_ctx.decrypt(out, in);
