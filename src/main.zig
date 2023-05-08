@@ -44,19 +44,17 @@ pub fn CBC(comptime BlockCipher: anytype) type {
             var i: usize = 0;
             while (i + block_length <= src.len) : (i += block_length) {
                 const in = src[i..][0..block_length];
-                var j: usize = 0;
-                while (j < block_length) : (j += 1) cv[j] ^= in[j];
+                for (cv[0..], in) |*x, y| x.* ^= y;
                 self.enc_ctx.encrypt(&cv, &cv);
                 @memcpy(dst[i .. i + block_length], &cv);
             }
             // Last block
-            {
+            if (i < src.len) {
                 var in = [_]u8{0} ** block_length;
                 var padding_length = @intCast(u8, padded_length - src.len);
                 @memset(in[padding_length..], padding_length);
                 @memcpy(in[0 .. src.len - i], src[i..]);
-                var j: usize = 0;
-                while (j < block_length) : (j += 1) cv[j] ^= in[j];
+                for (cv[0..], in) |*x, y| x.* ^= y;
                 self.enc_ctx.encrypt(&cv, &cv);
                 @memcpy(dst[i..], cv[0 .. dst.len - i]);
             }
@@ -81,8 +79,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
                 const out = dst[i..][0..block_length];
                 @memcpy(nextCV, in);
                 self.dec_ctx.decrypt(out, in);
-                var j: usize = 0;
-                while (j < block_length) : (j += 1) out[j] ^= cv[j];
+                for (out[0..], cv) |*x, y| x.* ^= y;
                 @memcpy(cv, nextCV);
             }
             // Last block - We intentionally don't check the padding to mitigate timing attacks
@@ -90,8 +87,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
                 const in = src[i..][0..block_length];
                 var out = [_]u8{0} ** block_length;
                 self.dec_ctx.decrypt(&out, in);
-                var j: usize = 0;
-                while (j < block_length) : (j += 1) out[j] ^= cv[j];
+                for (out[0..], cv) |*x, y| x.* ^= y;
                 @memcpy(dst[i..], out[0 .. dst.len - i]);
             }
         }
