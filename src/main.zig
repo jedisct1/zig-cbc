@@ -73,7 +73,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
             var cv = iv;
             var out: [block_length]u8 = undefined;
             // Decryption could be parallelized
-            while (i + block_length < dst.len) : (i += block_length) {
+            while (i + block_length <= dst.len) : (i += block_length) {
                 const in = src[i..][0..block_length];
                 self.dec_ctx.decrypt(&out, in);
                 for (&out, cv) |*x, y| x.* ^= y;
