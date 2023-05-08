@@ -71,10 +71,10 @@ pub fn CBC(comptime BlockCipher: anytype) type {
             debug.assert(src.len % block_length == 0);
             var i: usize = 0;
             var cv = iv;
+            var out: [block_length]u8 = undefined;
             // Decryption could be parallelized
             while (i + block_length < dst.len) : (i += block_length) {
                 const in = src[i..][0..block_length];
-                var out: [block_length]u8 = undefined;
                 self.dec_ctx.decrypt(&out, in);
                 for (&out, cv) |*x, y| x.* ^= y;
                 cv = in.*;
@@ -83,7 +83,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
             // Last block - We intentionally don't check the padding to mitigate timing attacks
             if (i < dst.len) {
                 const in = src[i..][0..block_length];
-                var out = [_]u8{0} ** block_length;
+                @memset(&out, 0);
                 self.dec_ctx.decrypt(&out, in);
                 for (&out, cv) |*x, y| x.* ^= y;
                 @memcpy(dst[i..], out[0 .. dst.len - i]);
