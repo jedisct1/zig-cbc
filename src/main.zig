@@ -2,6 +2,7 @@ const std = @import("std");
 const aes = std.crypto.core.aes;
 const mem = std.mem;
 const debug = std.debug;
+const testing = std.testing;
 
 /// CBC mode with PKCS#7 padding.
 ///
@@ -73,14 +74,16 @@ pub fn CBC(comptime BlockCipher: anytype) type {
             debug.assert(src.len % block_length == 0);
             var i: usize = 0;
             var cv = &iv;
+            var nextCV = &iv;
             // Decryption could be parallelized
             while (i + block_length <= dst.len) : (i += block_length) {
                 const in = src[i..][0..block_length];
                 const out = dst[i..][0..block_length];
+                @memcpy(nextCV, in);
                 self.dec_ctx.decrypt(out, in);
                 var j: usize = 0;
                 while (j < block_length) : (j += 1) out[j] ^= cv[j];
-                cv = in;
+                @memcpy(cv, nextCV);
             }
             // Last block - We intentionally don't check the padding to mitigate timing attacks
             if (i < dst.len) {
@@ -100,7 +103,7 @@ test "CBC mode" {
     const key = [_]u8{ 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c };
     const iv = [_]u8{ 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f };
     const src_ = "This is a test of AES-CBC that goes on longer than a couple blocks. It is a somewhat long test case to type out!";
-    try std.testing.expect(src_.len % 16 == 0); // sanity check that the input aligns to block bouGdary
+    try std.testing.expect(src_.len % 16 == 0); // sanity check that the input aligns to block boundary
 
     const z = M.init(key);
 
@@ -157,17 +160,88 @@ test "encrypt and decrypt on block boundary" {
     //
 
     {
-        const src = "0123456789abcdef";
-        try std.testing.expectEqual(16, src.len);
+        // one-block case
+        var payload_ = "0123456789abcdef";
+        var payload = try testing.allocator.alloc(u8, payload_.len);
+        defer testing.allocator.free(payload);
+        try std.testing.expectEqual(@as(usize, 16), payload.len); // sanity check
+        mem.copyForwards(u8, payload, payload_);
 
-        var dst = [_]u8{0} ** M.paddedLength(16);
-        z.encrypt(&dst, src, iv);
+        z.encrypt(payload, payload, iv);
+        try z.decrypt(payload, payload, iv);
 
-        const expected = &[_]u8{ 174, 250, 164, 11, 93, 18, 137, 95, 193, 237, 234, 162, 174, 174, 40, 189 };
-        try std.testing.expectEqualSlices(u8, expected, &dst);
-
-        var final = [_]u8{0} ** M.paddedLength(16);
-        try z.decrypt(&final, &dst, iv);
-        try std.testing.expectEqualSlices(u8, src, &final);
+        var byte: u8 = 0;
+        while (byte < payload_.len) : (byte += 1) {
+            try std.testing.expectEqual(payload_[byte], payload[byte]);
+        }
     }
+
+    {
+        // three-block case
+        var payload_ = "0123456789abcdef0123456789abcdef0123456789abcdef";
+        try std.testing.expectEqual(@as(usize, 48), payload_.len); // sanity check
+
+        var payload = try testing.allocator.alloc(u8, payload_.len);
+        defer testing.allocator.free(payload);
+        mem.copyForwards(u8, payload, payload_);
+
+        {
+            // test the case where the memory ranges do not overlap
+            var out = try testing.allocator.alloc(u8, payload.len);
+            defer testing.allocator.free(out);
+
+            var final = try testing.allocator.alloc(u8, payload.len);
+            defer testing.allocator.free(final);
+
+            z.encrypt(out, payload, iv);
+            try z.decrypt(final, out, iv);
+
+            try testing.expectEqualSlices(u8, payload_, payload);
+        }
+
+        {
+            // test the case where the memory ranges DO overlap
+            z.encrypt(payload, payload, iv);
+
+            // ensure the value has changed
+            var same = true;
+            for (payload_, payload) |before, after| {
+                if (before != after) {
+                    same = false;
+                    break;
+                }
+            }
+            try testing.expect(!same);
+
+            try z.decrypt(payload, payload, iv);
+
+            // back to its original value
+            try testing.expectEqualSlices(u8, payload_, payload);
+        }
+    }
+}
+
+test "encrypt and decrypt not on block boundary" {
+    const M = CBC(aes.Aes256);
+    const key = [_]u8{ 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c } ** 2;
+    const z = M.init(key);
+    const iv = [_]u8{ 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00 };
+
+    var payload_ = "0123456789abcdef0123456789abcdef0123456789abc";
+    try std.testing.expectEqual(@as(usize, 45), payload_.len); // sanity check
+
+    var payload = try testing.allocator.alloc(u8, payload_.len);
+    defer testing.allocator.free(payload);
+    mem.copyForwards(u8, payload, payload_);
+
+    var out = try testing.allocator.alloc(u8, M.paddedLength(payload.len));
+    defer testing.allocator.free(out);
+
+    var final = try testing.allocator.alloc(u8, M.paddedLength(payload.len));
+    defer testing.allocator.free(final);
+
+    z.encrypt(out, payload, iv);
+    try z.decrypt(final, out, iv);
+    try testing.expectEqual(payload_.len, final.len - 3);
+    try testing.expectEqualSlices(u8, payload_, final[0..payload.len]);
 }
