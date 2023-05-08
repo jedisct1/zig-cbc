@@ -54,8 +54,7 @@ h = hashes.Hash(hashes.SHA256())
 for length in range(0, len(src_)):
     src = src_[0:length]
     padder = padding.PKCS7(128).padder()
-    padded_src = padder.update(src)
-    padded_src += padder.finalize()
+    padded_src = padder.update(src) + padder.finalize()
     encryptor = cipher.encryptor()
     ct = encryptor.update(padded_src) + encryptor.finalize()
     h.update(ct)
