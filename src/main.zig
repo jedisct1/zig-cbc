@@ -45,7 +45,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
                 const in = src[i..][0..block_length];
                 for (cv[0..], in) |*x, y| x.* ^= y;
                 self.enc_ctx.encrypt(&cv, &cv);
-                @memcpy(dst[i .. i + block_length], &cv);
+                @memcpy(dst[i..][0..block_length], &cv);
             }
             // Last block
             if (i < src.len) {
@@ -70,21 +70,22 @@ pub fn CBC(comptime BlockCipher: anytype) type {
             }
             debug.assert(src.len % block_length == 0);
             var i: usize = 0;
-            var cv = &iv;
+            var cv = iv;
             // Decryption could be parallelized
-            while (i + block_length <= dst.len) : (i += block_length) {
+            while (i + block_length < dst.len) : (i += block_length) {
                 const in = src[i..][0..block_length];
-                const out = dst[i..][0..block_length];
-                self.dec_ctx.decrypt(out, in);
-                for (out[0..], cv) |*x, y| x.* ^= y;
-                cv = in;
+                var out: [block_length]u8 = undefined;
+                self.dec_ctx.decrypt(&out, in);
+                for (&out, cv) |*x, y| x.* ^= y;
+                cv = in.*;
+                @memcpy(dst[i..][0..block_length], &out);
             }
             // Last block - We intentionally don't check the padding to mitigate timing attacks
             if (i < dst.len) {
                 const in = src[i..][0..block_length];
                 var out = [_]u8{0} ** block_length;
                 self.dec_ctx.decrypt(&out, in);
-                for (out[0..], cv) |*x, y| x.* ^= y;
+                for (&out, cv) |*x, y| x.* ^= y;
                 @memcpy(dst[i..], out[0 .. dst.len - i]);
             }
         }
