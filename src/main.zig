@@ -49,7 +49,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
             }
             // Last block
             var in = [_]u8{0} ** block_length;
-            var padding_length = @intCast(u8, padded_length - src.len);
+            var padding_length:u8 = @intCast(padded_length - src.len);
             @memset(&in, padding_length);
             @memcpy(in[0 .. src.len - i], src[i..]);
             for (cv[0..], in) |*x, y| x.* ^= y;
