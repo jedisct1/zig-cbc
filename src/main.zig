@@ -36,6 +36,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
         /// Use the `paddedLength()` function to compute the ciphertext size.
         /// IV must be secret and unpredictable.
         pub fn encrypt(self: Self, dst: []u8, src: []const u8, iv: [EncryptCtx.block_length]u8) void {
+            // Note: encryption *could* be parallelized, see https://research.kudelskisecurity.com/2022/11/17/some-aes-cbc-encryption-myth-busting/
             const block_length = EncryptCtx.block_length;
             const padded_length = paddedLength(src.len);
             debug.assert(dst.len == padded_length); // destination buffer must hold the padded plaintext
@@ -49,7 +50,7 @@ pub fn CBC(comptime BlockCipher: anytype) type {
             }
             // Last block
             var in = [_]u8{0} ** block_length;
-            var padding_length:u8 = @intCast(padded_length - src.len);
+            var padding_length: u8 = @intCast(padded_length - src.len);
             @memset(&in, padding_length);
             @memcpy(in[0 .. src.len - i], src[i..]);
             for (cv[0..], in) |*x, y| x.* ^= y;
