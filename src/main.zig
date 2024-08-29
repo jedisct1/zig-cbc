@@ -31,6 +31,14 @@ pub fn CBC(comptime BlockCipher: anytype) type {
             return (std.math.divCeil(usize, length + 1, EncryptCtx.block_length) catch unreachable) * EncryptCtx.block_length;
         }
 
+        /// Return the maximum length of the plaintext given a ciphertext length.
+        pub fn maxDecryptedLength(length: usize) usize {
+            if (length < 16 or length % 16 != 0) {
+                return 0;
+            }
+            return length - 1;
+        }
+
         /// Encrypt the given plaintext for the given IV.
         /// The destination buffer must be large enough to hold the padded plaintext.
         /// Use the `paddedLength()` function to compute the ciphertext size.
@@ -59,12 +67,46 @@ pub fn CBC(comptime BlockCipher: anytype) type {
         }
 
         /// Decrypt the given ciphertext for the given IV.
-        /// The destination buffer must be large enough to hold the plaintext.
+        /// The destination buffer must have the size the plaintext.
         /// IV must be secret, unpredictable and match the one used for encryption.
         pub fn decrypt(self: Self, dst: []u8, src: []const u8, iv: [DecryptCtx.block_length]u8) !void {
             const block_length = DecryptCtx.block_length;
             const padded_length = paddedLength(dst.len);
             if (src.len != padded_length) {
+                return error.EncodingError;
+            }
+            debug.assert(src.len % block_length == 0);
+            var i: usize = 0;
+            var cv = iv;
+            var out: [block_length]u8 = undefined;
+            // Decryption could be parallelized
+            while (i + block_length < dst.len) : (i += block_length) {
+                const in = src[i..][0..block_length];
+                self.dec_ctx.decrypt(&out, in);
+                for (&out, cv) |*x, y| x.* ^= y;
+                cv = in.*;
+                @memcpy(dst[i..][0..block_length], &out);
+            }
+            if (i >= dst.len) {
+                return;
+            }
+            // Last block - We intentionally don't check the padding to mitigate timing attacks
+            const in = src[i..][0..block_length];
+            @memset(&out, 0);
+            self.dec_ctx.decrypt(&out, in);
+            for (&out, cv) |*x, y| x.* ^= y;
+            @memcpy(dst[i..], out[0 .. dst.len - i]);
+        }
+
+        /// Decrypt the given ciphertext for the given IV, and remove the PKCS#7 padding.
+        /// The destination buffer should be `maxDecryptedLength(src.len)` bytes long.
+        /// IV must be secret, unpredictable and match the one used for encryption.
+        /// Returns the slice of the decrypted plaintext.
+        /// This function doesn't run in constant time. If you need to avoid timing attacks, use `decrypt` instead.
+        pub fn decryptAndTrim(self: Self, dst: []u8, src: []const u8, iv: [DecryptCtx.block_length]u8) ![]const u8 {
+            const block_length = DecryptCtx.block_length;
+            const padded_length = paddedLength(dst.len);
+            if (src.len < padded_length) {
                 return error.EncodingError;
             }
             debug.assert(src.len % block_length == 0);
@@ -79,14 +121,22 @@ pub fn CBC(comptime BlockCipher: anytype) type {
                 cv = in.*;
                 @memcpy(dst[i..][0..block_length], &out);
             }
-            // Last block - We intentionally don't check the padding to mitigate timing attacks
-            if (i < dst.len) {
-                const in = src[i..][0..block_length];
-                @memset(&out, 0);
-                self.dec_ctx.decrypt(&out, in);
-                for (&out, cv) |*x, y| x.* ^= y;
-                @memcpy(dst[i..], out[0 .. dst.len - i]);
+            if (i >= dst.len) {
+                return dst;
             }
+            // Last block - We intentionally don't check the padding to mitigate timing attacks
+            const in = src[i..][0..block_length];
+            @memset(&out, 0);
+            self.dec_ctx.decrypt(&out, in);
+            for (&out, cv) |*x, y| x.* ^= y;
+            const padvalue = out[block_length - 1];
+            const left = (16 -% padvalue) & 15;
+            const writable = dst.len - i;
+            if (left > writable) {
+                return error.OutputTooLong;
+            }
+            @memcpy(dst[i..][0..left], out[0..left]);
+            return dst[0 .. i + left];
         }
     };
 }
@@ -130,6 +180,23 @@ test "CBC mode" {
         try z.decrypt(buf[0..len], &buf, iv);
 
         try std.testing.expectEqualSlices(u8, src_[0..len], buf[0..len]);
+    }
+    h.final(&res);
+    try std.testing.expectEqualSlices(u8, &expected, &res);
+
+    // Test decryption
+    h = std.crypto.hash.sha2.Sha256.init(.{});
+    @setEvalBranchQuota(10000);
+    inline for (0..src_.len) |len| {
+        const src = src_[0..len];
+        var dst = [_]u8{0} ** M.paddedLength(src.len);
+        z.encrypt(&dst, src, iv);
+        h.update(&dst);
+
+        var decryptedWithPadding = [_]u8{0} ** M.maxDecryptedLength(dst.len);
+        const decrypted = try z.decryptAndTrim(&decryptedWithPadding, &dst, iv);
+
+        try std.testing.expectEqualSlices(u8, src, decrypted);
     }
     h.final(&res);
     try std.testing.expectEqualSlices(u8, &expected, &res);
