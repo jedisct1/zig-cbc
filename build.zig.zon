@@ -1,6 +1,7 @@
 .{
-    .name = "cbc",
+    .name = .cbc,
     .version = "0.1.2",
+    .fingerprint = 0x36a095ac4ea211cd,
 
     .paths = .{
         "build.zig",
