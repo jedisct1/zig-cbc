@@ -2,10 +2,13 @@
     .name = .cbc,
     .version = "0.1.2",
     .fingerprint = 0x36a095ac4ea211cd,
+    .minimum_zig_version = "0.15.1",
 
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "src",
+        "LICENSE",
+        "README.md",
     },
 }
