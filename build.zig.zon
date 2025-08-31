@@ -1,6 +1,6 @@
 .{
     .name = .cbc,
-    .version = "0.1.2",
+    .version = "0.1.3",
     .fingerprint = 0x36a095ac4ea211cd,
     .minimum_zig_version = "0.15.1",
 
